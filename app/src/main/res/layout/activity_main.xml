@@ -1,42 +1,61 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fillViewport="true">
-    <LinearLayout android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:padding="20dp" android:orientation="vertical">
-        <TextView android:layout_width="match_parent"
-            android:layout_height="wrap_content" android:text="BON → RaceChrono"
-            android:textStyle="bold" android:textSize="26sp"
-            android:paddingBottom="8dp" />
-        <TextView android:layout_width="match_parent"
-            android:layout_height="wrap_content" android:text="BON1 / BON4 から VBO を生成"
-            android:textSize="14sp" android:paddingBottom="24dp" />
-        <Button android:id="@+id/buttonOpen"
-            android:layout_width="match_parent" android:layout_height="60dp"
-            android:text="インポートデータを選択" android:textSize="18sp" />
-        <TextView android:id="@+id/textView"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:background="#081827" android:fillViewport="true">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:padding="22dp" android:orientation="vertical">
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="BON☆CHRONO" android:textColor="#F4F8FF"
+            android:textStyle="bold" android:textSize="29sp" android:paddingBottom="4dp"/>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="ボンチョロノ  ·  BON1 / BON4 → RaceChrono"
+            android:textColor="#A9C2D8" android:textSize="13sp"
+            android:paddingBottom="30dp"/>
+        <Button android:id="@+id/buttonOpen" android:layout_width="match_parent"
+            android:layout_height="66dp" android:text="インポートデータを選択"
+            android:textSize="17sp" android:textAllCaps="false"
+            android:backgroundTint="#2379E9" android:textColor="#FFFFFF"/>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="複数ファイルを選択して一括変換できます"
+            android:textColor="#A9C2D8" android:textSize="12sp"
+            android:paddingTop="9dp" android:paddingBottom="24dp"/>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="出力形式" android:textStyle="bold" android:textColor="#F4F8FF"
+            android:textSize="16sp" android:paddingBottom="8dp"/>
+        <RadioGroup android:id="@+id/formatGroup" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:orientation="horizontal"
+            android:paddingBottom="20dp">
+            <RadioButton android:id="@+id/formatVbo" android:layout_width="0dp"
+                android:layout_weight="1" android:layout_height="wrap_content"
+                android:text="VBO（推奨）" android:checked="true"
+                android:textColor="#F4F8FF" android:buttonTint="#61B7FF"/>
+            <RadioButton android:id="@+id/formatNmea" android:layout_width="0dp"
+                android:layout_weight="1" android:layout_height="wrap_content"
+                android:text="NMEA" android:textColor="#F4F8FF"
+                android:buttonTint="#61B7FF"/>
+        </RadioGroup>
+        <ProgressBar android:id="@+id/progressBar" style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:paddingTop="18dp" android:paddingBottom="18dp"
-            android:textSize="15sp" android:text="BONファイルを選択してください" />
-        <ProgressBar android:id="@+id/progressBar"
-            android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:visibility="gone" android:indeterminate="true"
-            style="?android:attr/progressBarStyleHorizontal" />
-        <TextView android:layout_width="match_parent"
-            android:layout_height="wrap_content" android:text="フォルダ"
-            android:textStyle="bold" android:textSize="17sp"
-            android:layout_marginTop="28dp" />
-        <TextView android:id="@+id/folderStatus"
-            android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:paddingTop="12dp" android:paddingBottom="12dp"
-            android:textSize="14sp" />
-        <Button android:id="@+id/buttonSourceFolder"
-            android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="入力フォルダを変更" />
-        <Button android:id="@+id/buttonOutputFolder"
-            android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="出力フォルダを変更" />
+            android:indeterminate="true" android:visibility="gone"/>
+        <TextView android:id="@+id/textView" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:paddingTop="12dp"
+            android:paddingBottom="20dp" android:text="BONファイルを選択してください"
+            android:textColor="#D8E7F5" android:textSize="14sp"/>
+        <View android:layout_width="match_parent" android:layout_height="1dp"
+            android:background="#29465F"/>
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="フォルダ設定" android:textStyle="bold" android:textColor="#F4F8FF"
+            android:textSize="16sp" android:paddingTop="22dp" android:paddingBottom="8dp"/>
+        <TextView android:id="@+id/folderStatus" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:textColor="#A9C2D8"
+            android:textSize="14sp" android:paddingBottom="12dp"/>
+        <Button android:id="@+id/buttonSourceFolder" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="入力フォルダを変更"
+            android:textAllCaps="false" android:backgroundTint="#193B5A"
+            android:textColor="#F4F8FF"/>
+        <Button android:id="@+id/buttonOutputFolder" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:text="出力フォルダを変更"
+            android:textAllCaps="false" android:backgroundTint="#193B5A"
+            android:textColor="#F4F8FF"/>
     </LinearLayout>
 </ScrollView>
