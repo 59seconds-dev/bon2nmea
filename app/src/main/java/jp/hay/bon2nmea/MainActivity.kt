@@ -36,7 +36,6 @@ class MainActivity : AppCompatActivity() {
     private var samples: List<LocationData> = emptyList()
     private var suggestedTrack = "Unknown"
     private var detectedTime: LocalDateTime? = null
-    private var format = "vbo"
 
     private val chooseSourceTree = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
@@ -63,11 +62,6 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.buttonOpen).setOnClickListener { showFiles() }
         findViewById<Button>(R.id.buttonSourceFolder).setOnClickListener { chooseSourceTree.launch(null) }
         findViewById<Button>(R.id.buttonOutputFolder).setOnClickListener { chooseOutputTree.launch(null) }
-        findViewById<Button>(R.id.buttonSingleFile).setOnClickListener { chooseSingleFile.launch(arrayOf("*/*")) }
-        findViewById<Button>(R.id.buttonSave).setOnClickListener { export() }
-        findViewById<RadioGroup>(R.id.formatGroup).setOnCheckedChangeListener { _, id ->
-            format = if (id == R.id.formatNmea) "nmea" else "vbo"
-        }
         updateFolders()
         updateStatus()
     }
@@ -83,7 +77,6 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.textView).text =
             if (source == null) "BONファイルを選択してください"
             else "$sourceName\n推定コース: $suggestedTrack\n記録開始: ${detectedTime ?: "不明"}\nGPS点数: ${samples.size}"
-        findViewById<Button>(R.id.buttonSave).isEnabled = source != null && samples.isNotEmpty() && !busy
     }
 
     private fun persistTree(uri: Uri) {
@@ -135,7 +128,6 @@ class MainActivity : AppCompatActivity() {
         sourceName = name
         sourceVersion = if (ext == "BON4") LocationData.DataVersion.BON4 else LocationData.DataVersion.BON1
         findViewById<TextView>(R.id.textView).text = "解析中: $name"
-        findViewById<Button>(R.id.buttonSave).isEnabled = false
         lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
@@ -146,6 +138,7 @@ class MainActivity : AppCompatActivity() {
                 detectedTime = result.firstOrNull()?.m_timestamp
                 suggestedTrack = recognizeTrack(result)
                 updateStatus()
+                if (result.isNotEmpty()) export()
             } catch (e: Exception) {
                 findViewById<TextView>(R.id.textView).text = "解析失敗: ${e.message}"
             }
@@ -228,7 +221,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 val date = detectedTime?.format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
                     ?: "unknown_date"
-                val filename = "${date}_${track}.${format}"
+                val filename = "${date}_${track}.vbo"
                 val result = withContext(Dispatchers.IO) {
                     val folder = parent.findFile("BON4_Converted")
                         ?: parent.createDirectory("BON4_Converted")
@@ -244,7 +237,7 @@ class MainActivity : AppCompatActivity() {
                     try {
                         contentResolver.openInputStream(src)!!.use { raw ->
                             contentResolver.openOutputStream(dest.uri, "wt")!!.bufferedWriter().use { writer ->
-                                writeConverted(raw, writer, sourceVersion, format)
+                                writeConverted(raw, writer, sourceVersion, "vbo")
                             }
                         }
                     } catch (e: Exception) { dest.delete(); throw e }
