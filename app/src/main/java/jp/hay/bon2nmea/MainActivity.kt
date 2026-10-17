@@ -74,6 +74,8 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.buttonOutputFolder).setOnClickListener { chooseOutputTree.launch(null) }
         updateFolders()
         updateStatus()
+        findViewById<TextView>(R.id.versionInfo).text =
+            "BON☆CHRONO v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · JST / コース別保存"
     }
 
     private fun updateFolders() {
