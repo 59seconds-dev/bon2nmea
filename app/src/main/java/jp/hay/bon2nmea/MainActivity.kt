@@ -89,32 +89,62 @@ class MainActivity : AppCompatActivity() {
         val uri = prefs.getString(key, null) ?: return null
         return try { DocumentFile.fromTreeUri(this, Uri.parse(uri)) } catch (_: Exception) { null }
     }
+    private data class BonEntry(val uri: Uri, val name: String, val modified: Long)
+
     private fun showFiles() {
         val dir = tree("source_tree")
-        if (dir == null || !dir.canRead()) {
-            chooseSourceTree.launch(null); return
-        }
-        val entries = dir.listFiles().filter {
-            it.isFile && Regex("(?i)\\.bon[14]$").containsMatchIn(it.name ?: "")
-        }
-        if (entries.isEmpty()) {
-            AlertDialog.Builder(this).setMessage("BON1/BON4ファイルがありません")
-                .setPositiveButton("フォルダ変更") { _, _ -> chooseSourceTree.launch(null) }
-                .setNeutralButton("単一ファイル") { _, _ -> chooseSingleFile.launch(arrayOf("*/*")) }
-                .setNegativeButton("閉じる", null).show()
+        if (dir == null) {
+            chooseSourceTree.launch(null)
             return
         }
-        val newest = prefs.getBoolean("newest_first", true)
-        val ordered = if (newest) entries.sortedByDescending { it.lastModified() }
-                      else entries.sortedBy { it.name?.lowercase() }
-        val labels = ordered.map { it.name ?: "(unnamed)" }.toTypedArray()
-        AlertDialog.Builder(this).setTitle(if (newest) "BONファイル（更新日が新しい順）" else "BONファイル（名前順）")
-            .setItems(labels) { _, which -> selectSource(ordered[which].uri, labels[which]) }
-            .setPositiveButton("並び順を切替") { _, _ ->
-                prefs.edit().putBoolean("newest_first", !newest).apply(); showFiles()
+        val loading = AlertDialog.Builder(this)
+            .setMessage("BONファイルを検索中…")
+            .setNegativeButton("キャンセル", null)
+            .create()
+        loading.show()
+        lifecycleScope.launch {
+            try {
+                val entries = withContext(Dispatchers.IO) {
+                    if (!dir.canRead()) error("入力フォルダを読み取れません")
+                    dir.listFiles().mapNotNull { file ->
+                        val name = file.name ?: return@mapNotNull null
+                        if (file.isFile && (name.endsWith(".bon4", true) || name.endsWith(".bon1", true)))
+                            BonEntry(file.uri, name, file.lastModified())
+                        else null
+                    }
+                }
+                if (!loading.isShowing) return@launch
+                loading.dismiss()
+                if (entries.isEmpty()) {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setMessage("BON1/BON4ファイルがありません")
+                        .setPositiveButton("フォルダ変更") { _, _ -> chooseSourceTree.launch(null) }
+                        .setNeutralButton("単一ファイル") { _, _ -> chooseSingleFile.launch(arrayOf("*/*")) }
+                        .setNegativeButton("閉じる", null).show()
+                    return@launch
+                }
+                val newest = prefs.getBoolean("newest_first", true)
+                val ordered = if (newest) entries.sortedByDescending { it.modified }
+                              else entries.sortedBy { it.name.lowercase() }
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle(if (newest) "BONファイル（新しい順）" else "BONファイル（名前順）")
+                    .setItems(ordered.map { it.name }.toTypedArray()) { _, which ->
+                        selectSource(ordered[which].uri, ordered[which].name)
+                    }
+                    .setPositiveButton("並び順を切替") { _, _ ->
+                        prefs.edit().putBoolean("newest_first", !newest).apply()
+                        showFiles()
+                    }
+                    .setNeutralButton("フォルダ変更") { _, _ -> chooseSourceTree.launch(null) }
+                    .setNegativeButton("閉じる", null).show()
+            } catch (e: Exception) {
+                loading.dismiss()
+                AlertDialog.Builder(this@MainActivity)
+                    .setMessage("ファイル一覧の取得に失敗: ${e.message}")
+                    .setPositiveButton("フォルダ変更") { _, _ -> chooseSourceTree.launch(null) }
+                    .setNegativeButton("閉じる", null).show()
             }
-            .setNeutralButton("フォルダ変更") { _, _ -> chooseSourceTree.launch(null) }
-            .setNegativeButton("閉じる", null).show()
+        }
     }
     private fun displayName(uri: Uri): String {
         contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
