@@ -208,14 +208,20 @@ class MainActivity : AppCompatActivity() {
                                 ?: error("読み取りに失敗")
                             if (points.isEmpty()) error("GPSデータがありません")
                             val track = recognizeTrack(points).replace(Regex("[^a-zA-Z0-9_-]"), "_").take(40)
+                            val courseFolder = folder.findFile(track)
+                                ?: folder.createDirectory(track)
+                                ?: error("コース別フォルダを作成できません: $track")
+                            if (!courseFolder.isDirectory || !courseFolder.canWrite()) {
+                                error("コース別フォルダに書き込めません: $track")
+                            }
                             val firstTime = points.first().m_timestamp
                             val date = firstTime.format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
                             var name = "${date}_${track}.${format}"
                             var suffix = 1
-                            while (folder.findFile(name) != null) {
+                            while (courseFolder.findFile(name) != null) {
                                 name = "${date}_${track}_${suffix++}.${format}"
                             }
-                            val dest = folder.createFile("application/octet-stream", name)
+                            val dest = courseFolder.createFile("application/octet-stream", name)
                                 ?: error("保存ファイルを作れません")
                             try {
                                 contentResolver.openInputStream(entry.uri)!!.use { input ->
