@@ -136,6 +136,7 @@ class MainActivity : AppCompatActivity() {
                 findViewById<TextView>(R.id.textView).text =
                     "$name\n推定: $suggestedTrack\n記録: ${detectedTime ?: "不明"}"
                 if (tree("output_tree") == null) chooseOutputTree.launch(null)
+                else if (suggestedTrack != "Unknown") save(suggestedTrack)
             } catch (e: Exception) {
                 findViewById<TextView>(R.id.textView).text = "解析失敗: ${e.message}"
             }
@@ -228,7 +229,7 @@ class MainActivity : AppCompatActivity() {
                     while (folder.findFile(candidate) != null) {
                         candidate = "${date}_${track}_${suffix++}.${format}"
                     }
-                    val mime = if (format == "vbo") "text/plain" else "text/plain"
+                    val mime = "application/octet-stream"
                     val dest = folder.createFile(mime, candidate) ?: error("保存ファイルを作れません")
                     try {
                         contentResolver.openInputStream(src)!!.use { raw ->
