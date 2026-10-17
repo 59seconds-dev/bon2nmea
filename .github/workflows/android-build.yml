@@ -1,0 +1,22 @@
+name: Android build validation
+on:
+  push:
+    branches: [develop/bon4-workflow]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+      - uses: android-actions/setup-android@v3
+      - name: Build debug APK
+        run: bash ./gradlew assembleDevelopDebug --stacktrace
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: bon4-converter-debug
+          path: app/build/outputs/apk/develop/debug/*.apk
