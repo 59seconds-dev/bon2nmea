@@ -220,7 +220,7 @@ class MainActivity : AppCompatActivity() {
                     var candidate = filename
                     var suffix = 1
                     while (folder.findFile(candidate) != null) {
-                        candidate = "${date}_${track}_${suffix++}.${format}"
+                        candidate = "${date}_${track}_${suffix++}.vbo"
                     }
                     val mime = "application/octet-stream"
                     val dest = folder.createFile(mime, candidate) ?: error("保存ファイルを作れません")
