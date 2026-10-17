@@ -261,16 +261,17 @@ class MainActivity : AppCompatActivity() {
         if (readFully(input, ByteArray(8)) != 8) error("BONヘッダーが不完全です")
         if (output == "vbo") {
             // RaceChrono uses the creation date from the first VBO line.
-            val creation = detectedTime?.format(DateTimeFormatter.ofPattern("dd/MM/yyyy '@' HH:mm"))
-                ?: "01/01/2000 @ 00:00"
-            writer.write("File created on $creation"); writer.newLine()
+            val creation = detectedTime?.format(DateTimeFormatter.ofPattern("dd/MM/yyyy 'at' HH:mm:ss"))
+                ?: "01/01/2000 at 00:00:00"
+            writer.write("File created on $creation"); writer.newLine(); writer.newLine()
             writer.write("[header]"); writer.newLine()
             listOf("satellites", "time", "latitude", "longitude", "velocity kmh",
                 "heading", "height").forEach { writer.write(it); writer.newLine() }
+            writer.newLine()
             writer.write("[comments]"); writer.newLine()
-            writer.write("Converted from BON by eightlien"); writer.newLine()
+            writer.write("Converted from BON by eightlien"); writer.newLine(); writer.newLine()
             writer.write("[column names]"); writer.newLine()
-            writer.write("sats time lat long velocity heading height"); writer.newLine()
+            writer.write("sats time lat long velocity heading height"); writer.newLine(); writer.newLine()
             writer.write("[data]"); writer.newLine()
         }
         var previous: LocationData? = null
