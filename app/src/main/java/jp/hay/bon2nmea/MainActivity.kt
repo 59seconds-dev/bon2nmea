@@ -285,40 +285,83 @@ class MainActivity : AppCompatActivity() {
     }
     private data class TrackZone(val name: String, val lat: Double, val lon: Double, val radius: Double)
 
+    // Offline geofence catalogue. Centres are sourced from published OSM/MapFan
+    // circuit coordinates; radius is a conservative coverage estimate, not a
+    // certified track boundary. Distinguish adjacent courses by GPS point votes.
+    private val trackZones = listOf(
+        TrackZone("SUGO", 38.138472, 140.778208, 850.0),
+        TrackZone("TC2000", 36.150970, 139.922260, 170.0),
+        TrackZone("TC1000", 36.150998, 139.924776, 145.0),
+        TrackZone("Nikko", 36.662230, 139.862570, 280.0),
+        TrackZone("Fuji", 35.371667, 138.926667, 1200.0),
+        TrackZone("Suzuka", 34.8433, 136.5409, 1250.0),
+        TrackZone("Link", 37.8029892, 140.3899371, 480.0),
+        TrackZone("Autopolis", 33.03694, 130.973028, 1100.0),
+        TrackZone("Ebisu_East", 37.64384, 140.37222, 210.0),
+        TrackZone("Ebisu_West", 37.63942, 140.37174, 210.0),
+        TrackZone("Ebisu_North", 37.64634, 140.36557, 190.0),
+        TrackZone("Ebisu_DriftStadium", 37.64261, 140.37097, 110.0),
+        TrackZone("Ebisu", 37.64217, 140.36910, 850.0)
+    )
+
     private fun recognizeTrack(points: List<LocationData>): String {
         if (points.isEmpty()) return "Unknown"
-        // Coordinates are decimal degrees. Distances are only a location estimate,
-        // not lap/SF recognition. Separate TC1000 and TC2000 by their track centres.
-        val zones = listOf(
-            TrackZone("SUGO", 38.138472, 140.778208, 850.0),
-            TrackZone("TC2000", 36.150970, 139.922260, 145.0),
-            TrackZone("TC1000", 36.150998, 139.924776, 125.0),
-            TrackZone("Nikko", 36.662230, 139.862570, 250.0),
-            TrackZone("Fuji", 35.371667, 138.926667, 1100.0)
-        )
-        // Use a robust median, avoiding occasional GPS jumps and pit movement.
-        val lats = points.map { it.m_latitude / 60000000.0 }.filter { it in -90.0..90.0 }.sorted()
-        val lons = points.map { it.m_longtitude / 60000000.0 }.filter { it in -180.0..180.0 }.sorted()
-        if (lats.isEmpty() || lons.isEmpty()) return "Unknown"
-        val lat = lats[lats.size / 2]
-        val lon = lons[lons.size / 2]
-        val match = zones.map { it to distanceMeters(lat, lon, it.lat, it.lon) }
-            .filter { it.second <= it.first.radius }
-            .minByOrNull { it.second }
-        if (match != null) return match.first.name
+        val positions = points.asSequence().mapNotNull {
+            val lat = it.m_latitude / 60000000.0
+            val lon = it.m_longtitude / 60000000.0
+            if (lat in 20.0..46.0 && lon in 122.0..154.0) Pair(lat, lon) else null
+        }.toList()
+        if (positions.isEmpty()) return "Unknown"
 
-        // Previously confirmed track names remain available for other circuits.
+        // Vote with every sampled point rather than one median. This is more
+        // reliable for a large circuit and for two neighbouring tracks.
+        val candidates = trackZones.filter { zone ->
+            positions.any { (lat, lon) ->
+                distanceMeters(lat, lon, zone.lat, zone.lon) <= zone.radius
+            }
+        }
+        if (candidates.isNotEmpty()) {
+            val votes = candidates.map { zone ->
+                val hits = positions.count { (lat, lon) ->
+                    distanceMeters(lat, lon, zone.lat, zone.lon) <= zone.radius
+                }
+                val avgDistance = positions.asSequence()
+                    .map { (lat, lon) -> distanceMeters(lat, lon, zone.lat, zone.lon) }
+                    .filter { it <= zone.radius }.average()
+                Triple(zone, hits, if (avgDistance.isNaN()) Double.MAX_VALUE else avgDistance)
+            }
+            // The generic Ebisu area is a fallback only when a specific course
+            // does not account for a substantial share of GPS points.
+            val specific = votes.filter { it.first.name != "Ebisu" }
+                .sortedWith(compareByDescending<Triple<TrackZone, Int, Double>> { it.second }
+                    .thenBy { it.third })
+            val strongest = specific.firstOrNull()
+            if (strongest != null && strongest.second >= maxOf(2, positions.size / 10)) {
+                return strongest.first.name
+            }
+            val general = votes.firstOrNull { it.first.name == "Ebisu" }
+            if (general != null && general.second >= maxOf(2, positions.size / 10)) return "Ebisu"
+            val best = votes.maxWithOrNull(compareBy<Triple<TrackZone, Int, Double>> { it.second }
+                .thenBy { -it.third })
+            if (best != null && best.second >= maxOf(2, positions.size / 10)) return best.first.name
+        }
+
+        // Keep support for previously learned circuits outside the built-in list.
         val saved = prefs.getString("track_fingerprints", "") ?: ""
         val matches = saved.lines().mapNotNull {
             val p = it.split("|")
             if (p.size != 3) null else {
-                val a = p[1].toDoubleOrNull()
-                val b = p[2].toDoubleOrNull()
-                if (a == null || b == null) null else Triple(p[0], a, b)
+                val lat = p[1].toDoubleOrNull()
+                val lon = p[2].toDoubleOrNull()
+                if (lat == null || lon == null) null else Triple(p[0], lat, lon)
             }
         }
+        val lats = positions.map { it.first }.sorted()
+        val lons = positions.map { it.second }.sorted()
+        val lat = lats[lats.size / 2]
+        val lon = lons[lons.size / 2]
         val best = matches.minByOrNull { distanceMeters(lat, lon, it.second, it.third) }
-        return if (best != null && distanceMeters(lat, lon, best.second, best.third) < 100.0)
+        return if (best != null && distanceMeters(lat, lon, best.second, best.third) < 200.0)
             best.first else "Unknown"
     }
     private fun distanceMeters(a: Double, b: Double, c: Double, d: Double): Double {
