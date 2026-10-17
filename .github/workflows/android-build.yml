@@ -12,7 +12,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      # ubuntu-latest already has the Android SDK; avoid legacy 'tools' package installation.
+      - name: Verify Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          test -d "$ANDROID_HOME/platforms/android-31" || "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-31"
       # Gradle 7.2 / Android Gradle Plugin 7.1.3 requires Java 11 for reliable builds.
       # Android SDK command line tools require Java 17 during SDK setup.
       - uses: actions/setup-java@v4
