@@ -13,7 +13,13 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
-      # Gradle 7.2 / Android Gradle Plugin 7.1.3 requires Java 11 for reliable builds.\n      # Android SDK command line tools require Java 17 during SDK setup.\n      - uses: actions/setup-java@v4\n        with:\n          distribution: temurin\n          java-version: '11'\n      - name: Build debug APK
+      # Gradle 7.2 / Android Gradle Plugin 7.1.3 requires Java 11 for reliable builds.
+      # Android SDK command line tools require Java 17 during SDK setup.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+      - name: Build debug APK
         run: bash ./gradlew assembleDevelopDebug --stacktrace
       - name: Upload APK
         uses: actions/upload-artifact@v4
