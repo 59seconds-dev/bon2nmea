@@ -4,9 +4,9 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/bon_chrono_icon"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
+        android:roundIcon="@drawable/bon_chrono_icon"
         android:supportsRtl="true"
         android:theme="@style/Theme.Bon2Nmea">
         <activity
