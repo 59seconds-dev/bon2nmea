@@ -203,10 +203,31 @@ class MainActivity : AppCompatActivity() {
         }
         return offset
     }
+    private data class TrackZone(val name: String, val lat: Double, val lon: Double, val radius: Double)
+
     private fun recognizeTrack(points: List<LocationData>): String {
         if (points.isEmpty()) return "Unknown"
-        val lat = points.map { it.m_latitude / 60000000.0 }.average()
-        val lon = points.map { it.m_longtitude / 60000000.0 }.average()
+        // Coordinates are decimal degrees. Distances are only a location estimate,
+        // not lap/SF recognition. Separate TC1000 and TC2000 by their track centres.
+        val zones = listOf(
+            TrackZone("SUGO", 38.138472, 140.778208, 850.0),
+            TrackZone("TC2000", 36.150970, 139.922260, 145.0),
+            TrackZone("TC1000", 36.150998, 139.924776, 125.0),
+            TrackZone("Nikko", 36.662230, 139.862570, 250.0),
+            TrackZone("Fuji", 35.371667, 138.926667, 1100.0)
+        )
+        // Use a robust median, avoiding occasional GPS jumps and pit movement.
+        val lats = points.map { it.m_latitude / 60000000.0 }.filter { it in -90.0..90.0 }.sorted()
+        val lons = points.map { it.m_longtitude / 60000000.0 }.filter { it in -180.0..180.0 }.sorted()
+        if (lats.isEmpty() || lons.isEmpty()) return "Unknown"
+        val lat = lats[lats.size / 2]
+        val lon = lons[lons.size / 2]
+        val match = zones.map { it to distanceMeters(lat, lon, it.lat, it.lon) }
+            .filter { it.second <= it.first.radius }
+            .minByOrNull { it.second }
+        if (match != null) return match.first.name
+
+        // Previously confirmed track names remain available for other circuits.
         val saved = prefs.getString("track_fingerprints", "") ?: ""
         val matches = saved.lines().mapNotNull {
             val p = it.split("|")
@@ -216,8 +237,6 @@ class MainActivity : AppCompatActivity() {
                 if (a == null || b == null) null else Triple(p[0], a, b)
             }
         }
-        // A short centroid distance is only a suggestion; TC1000/TC2000 are
-        // adjacent and must not be conflated without a learned trajectory fingerprint.
         val best = matches.minByOrNull { distanceMeters(lat, lon, it.second, it.third) }
         return if (best != null && distanceMeters(lat, lon, best.second, best.third) < 100.0)
             best.first else "Unknown"
