@@ -36,12 +36,13 @@ class MainActivity : AppCompatActivity() {
     private var samples: List<LocationData> = emptyList()
     private var suggestedTrack = "Unknown"
     private var detectedTime: LocalDateTime? = null
-    private var format = "nmea"
+    private var format = "vbo"
 
     private val chooseSourceTree = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
             persistTree(uri)
             prefs.edit().putString("source_tree", uri.toString()).apply()
+            updateFolders()
             showFiles()
         }
     }
@@ -49,7 +50,7 @@ class MainActivity : AppCompatActivity() {
         if (uri != null) {
             persistTree(uri)
             prefs.edit().putString("output_tree", uri.toString()).apply()
-            toast("出力先を保存しました")
+            updateFolders()
         }
     }
     private val chooseSingleFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -59,20 +60,30 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        findViewById<Button>(R.id.buttonOpen).setOnClickListener {
-            if (prefs.contains("source_tree")) showFiles()
-            else chooseSourceTree.launch(null)
-        }
+        findViewById<Button>(R.id.buttonOpen).setOnClickListener { showFiles() }
+        findViewById<Button>(R.id.buttonSourceFolder).setOnClickListener { chooseSourceTree.launch(null) }
+        findViewById<Button>(R.id.buttonOutputFolder).setOnClickListener { chooseOutputTree.launch(null) }
+        findViewById<Button>(R.id.buttonSingleFile).setOnClickListener { chooseSingleFile.launch(arrayOf("*/*")) }
         findViewById<Button>(R.id.buttonSave).setOnClickListener { export() }
-        // Long-press source to change the folder; long-press save to change output folder.
-        findViewById<Button>(R.id.buttonOpen).setOnLongClickListener {
-            chooseSourceTree.launch(null); true
+        findViewById<RadioGroup>(R.id.formatGroup).setOnCheckedChangeListener { _, id ->
+            format = if (id == R.id.formatNmea) "nmea" else "vbo"
         }
-        findViewById<Button>(R.id.buttonSave).setOnLongClickListener {
-            chooseOutputTree.launch(null); true
-        }
+        updateFolders()
+        updateStatus()
+    }
+
+    private fun updateFolders() {
+        val input = tree("source_tree")
+        val output = tree("output_tree")
+        findViewById<TextView>(R.id.folderStatus).text =
+            "入力: ${input?.name ?: "未設定"}\n保存先: ${output?.name ?: "未設定"} / BON4_Converted"
+    }
+
+    private fun updateStatus() {
         findViewById<TextView>(R.id.textView).text =
-            "BONフォルダを選択してください（ボタン長押しで変更）"
+            if (source == null) "BONファイルを選択してください"
+            else "$sourceName\n推定コース: $suggestedTrack\n記録開始: ${detectedTime ?: "不明"}\nGPS点数: ${samples.size}"
+        findViewById<Button>(R.id.buttonSave).isEnabled = source != null && samples.isNotEmpty() && !busy
     }
 
     private fun persistTree(uri: Uri) {
@@ -124,6 +135,7 @@ class MainActivity : AppCompatActivity() {
         sourceName = name
         sourceVersion = if (ext == "BON4") LocationData.DataVersion.BON4 else LocationData.DataVersion.BON1
         findViewById<TextView>(R.id.textView).text = "解析中: $name"
+        findViewById<Button>(R.id.buttonSave).isEnabled = false
         lifecycleScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) {
@@ -133,10 +145,7 @@ class MainActivity : AppCompatActivity() {
                 samples = result
                 detectedTime = result.firstOrNull()?.m_timestamp
                 suggestedTrack = recognizeTrack(result)
-                findViewById<TextView>(R.id.textView).text =
-                    "$name\n推定: $suggestedTrack\n記録: ${detectedTime ?: "不明"}"
-                if (tree("output_tree") == null) chooseOutputTree.launch(null)
-                else if (suggestedTrack != "Unknown") save(suggestedTrack)
+                updateStatus()
             } catch (e: Exception) {
                 findViewById<TextView>(R.id.textView).text = "解析失敗: ${e.message}"
             }
@@ -201,12 +210,8 @@ class MainActivity : AppCompatActivity() {
             setText(if (suggestedTrack == "Unknown") "" else suggestedTrack)
             hint = "コース名（例 TC2000）"
         }
-        val formats = arrayOf("NMEA", "VBO (experimental)")
-        AlertDialog.Builder(this).setTitle("コースを確認して出力")
+        AlertDialog.Builder(this).setTitle("コース名を確認")
             .setView(input)
-            .setSingleChoiceItems(formats, if (format == "nmea") 0 else 1) { _, which ->
-                format = if (which == 0) "nmea" else "vbo"
-            }
             .setPositiveButton("変換して保存") { _, _ ->
                 val track = input.text.toString().trim().ifBlank { "Unknown" }
                     .replace(Regex("[^a-zA-Z0-9_-]"), "_").take(40)
@@ -215,8 +220,9 @@ class MainActivity : AppCompatActivity() {
     }
     private fun save(track: String) {
         val src = source ?: return
-        val folder = tree("output_tree") ?: return
+        val parent = tree("output_tree") ?: run { chooseOutputTree.launch(null); return }
         busy = true
+        updateStatus()
         findViewById<ProgressBar>(R.id.progressBar).visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
@@ -224,6 +230,10 @@ class MainActivity : AppCompatActivity() {
                     ?: "unknown_date"
                 val filename = "${date}_${track}.${format}"
                 val result = withContext(Dispatchers.IO) {
+                    val folder = parent.findFile("BON4_Converted")
+                        ?: parent.createDirectory("BON4_Converted")
+                        ?: error("保存先フォルダを作成できません")
+                    if (!folder.isDirectory || !folder.canWrite()) error("保存先フォルダに書き込めません")
                     var candidate = filename
                     var suffix = 1
                     while (folder.findFile(candidate) != null) {
@@ -251,6 +261,7 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) { toast("変換失敗: ${e.message}") }
             finally {
                 busy = false
+                updateStatus()
                 findViewById<ProgressBar>(R.id.progressBar).visibility = View.INVISIBLE
             }
         }
