@@ -292,10 +292,12 @@ class MainActivity : AppCompatActivity() {
     // certified track boundary. Distinguish adjacent courses by GPS point votes.
     private val trackZones = listOf(
         TrackZone("SUGO", 38.138472, 140.778208, 850.0),
-        TrackZone("TC2000", 36.150970, 139.922260, 170.0),
-        TrackZone("TC1000", 36.150998, 139.924776, 145.0),
+        TrackZone("TC2000", 36.150450, 139.920150, 350.0),
+        TrackZone("TC1000", 36.150978, 139.925108, 160.0),
         TrackZone("Nikko", 36.662230, 139.862570, 280.0),
         TrackZone("Fuji", 35.371667, 138.926667, 1200.0),
+        TrackZone("Okayama", 34.913782, 134.220139, 800.0),
+        TrackZone("Tokachi", 42.630395, 143.292275, 1500.0),
         TrackZone("Suzuka", 34.8433, 136.5409, 1250.0),
         TrackZone("Link", 37.8029892, 140.3899371, 480.0),
         TrackZone("Autopolis", 33.03694, 130.973028, 1100.0),
