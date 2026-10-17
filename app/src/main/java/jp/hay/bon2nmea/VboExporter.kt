@@ -17,7 +17,7 @@ object VboExporter {
         val longitudeMinutes = point.m_longtitude / 1_000_000.0
         val speedKmh = point.m_speed * 0.036 // BON speed is cm/s
         val heading = point.m_course / 100.0
-        return String.format(Locale.US, "0 %s %+.6f %+.6f %.2f %.2f +0000.00",
+        // BON does not provide satellite count; use a documented compatibility placeholder.\n        return String.format(Locale.US, "008 %s %+.6f %+.6f %.2f %.2f +0000.00",
             time, latitudeMinutes, longitudeMinutes, speedKmh, heading)
     }
 }
