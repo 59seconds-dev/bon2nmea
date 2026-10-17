@@ -27,3 +27,21 @@ Development branch: `develop/bon4-workflow`. The upstream fork's `main` remains 
 5. Build and test APK on supported Android versions.
 
 This file is a development plan, **not** a claim that any feature has already been implemented or tested.
+
+## Implemented on development branch (unverified build)
+- SAF input/output tree selection and persisted URI permissions.
+- BON1/BON4 source list with newest-first/name sorting and folder change.
+- BON4 timestamp-based output naming with collision suffixes.
+- Track-name confirmation and locally remembered approximate GPS centroids.
+- Auto-export when a previously confirmed track is recognized.
+- NMEA conversion with full-record reads and basic truncated-record rejection.
+- Experimental VBO export (not validated against RaceChrono).
+- GitHub Actions APK build workflow.
+
+## Blocking validation / limitations
+- No Android SDK/Gradle runtime available in the current execution environment; no successful APK build has been observed.
+- GitHub Actions on a newly forked repository may need to be enabled by its owner.
+- Learned track detection is centroid-only: it is NOT a verified TC1000/TC2000 trajectory classifier.
+- VBO syntax, coordinate conventions, elevation units, and RaceChrono import must be tested before production use.
+- File providers may differ in extension handling and modified-date metadata.
+- Do not merge to main or distribute as stable before build, installation, and BON4-to-RaceChrono checks.
