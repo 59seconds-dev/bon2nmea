@@ -36,6 +36,8 @@ class MainActivity : AppCompatActivity() {
     private var samples: List<LocationData> = emptyList()
     private var suggestedTrack = "Unknown"
     private var detectedTime: LocalDateTime? = null
+    private var pendingBatch: List<BonEntry>? = null
+    private var outputFormat: String = "vbo"
 
     private val chooseSourceTree = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
@@ -50,7 +52,7 @@ class MainActivity : AppCompatActivity() {
             persistTree(uri)
             prefs.edit().putString("output_tree", uri.toString()).apply()
             updateFolders()
-            if (source != null && samples.isNotEmpty()) export()
+            pendingBatch?.let { batch -> pendingBatch = null; convertBatch(batch) }
         }
     }
     private val chooseSingleFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -61,6 +63,13 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         findViewById<Button>(R.id.buttonOpen).setOnClickListener { showFiles() }
+        val formatGroup = findViewById<RadioGroup>(R.id.formatGroup)
+        outputFormat = prefs.getString("output_format", "vbo") ?: "vbo"
+        formatGroup.check(if (outputFormat == "nmea") R.id.formatNmea else R.id.formatVbo)
+        formatGroup.setOnCheckedChangeListener { _, checked ->
+            outputFormat = if (checked == R.id.formatNmea) "nmea" else "vbo"
+            prefs.edit().putString("output_format", outputFormat).apply()
+        }
         findViewById<Button>(R.id.buttonSourceFolder).setOnClickListener { chooseSourceTree.launch(null) }
         findViewById<Button>(R.id.buttonOutputFolder).setOnClickListener { chooseOutputTree.launch(null) }
         updateFolders()
@@ -126,17 +135,23 @@ class MainActivity : AppCompatActivity() {
                 val newest = prefs.getBoolean("newest_first", true)
                 val ordered = if (newest) entries.sortedByDescending { it.modified }
                               else entries.sortedBy { it.name.lowercase() }
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle(if (newest) "BONファイル（新しい順）" else "BONファイル（名前順）")
-                    .setItems(ordered.map { it.name }.toTypedArray()) { _, which ->
-                        selectSource(ordered[which].uri, ordered[which].name)
+                val checked = BooleanArray(ordered.size)
+                val dialog = AlertDialog.Builder(this@MainActivity)
+                    .setTitle("BONファイルを選択（複数可）")
+                    .setMultiChoiceItems(ordered.map { it.name }.toTypedArray(), checked) { _, which, value ->
+                        checked[which] = value
                     }
-                    .setPositiveButton("並び順を切替") { _, _ ->
+                    .setPositiveButton("選択したファイルを変換") { _, _ ->
+                        val selected = ordered.filterIndexed { index, _ -> checked[index] }
+                        if (selected.isEmpty()) toast("ファイルを選択してください")
+                        else convertBatch(selected)
+                    }
+                    .setNeutralButton("並び順切替") { _, _ ->
                         prefs.edit().putBoolean("newest_first", !newest).apply()
                         showFiles()
                     }
-                    .setNeutralButton("フォルダ変更") { _, _ -> chooseSourceTree.launch(null) }
-                    .setNegativeButton("閉じる", null).show()
+                    .setNegativeButton("キャンセル", null).create()
+                dialog.show()
             } catch (e: Exception) {
                 loading.dismiss()
                 AlertDialog.Builder(this@MainActivity)
@@ -153,25 +168,84 @@ class MainActivity : AppCompatActivity() {
         return "input.bon4"
     }
     private fun selectSource(uri: Uri, name: String) {
-        val ext = name.substringAfterLast('.', "").uppercase()
-        if (ext != "BON1" && ext != "BON4") { toast("BON1/BON4を選んでください"); return }
-        source = uri
-        sourceName = name
-        sourceVersion = if (ext == "BON4") LocationData.DataVersion.BON4 else LocationData.DataVersion.BON1
-        findViewById<TextView>(R.id.textView).text = "解析中: $name"
+        convertBatch(listOf(BonEntry(uri, name, 0)))
+    }
+
+    private fun convertBatch(entries: List<BonEntry>) {
+        if (busy) { toast("変換中です"); return }
+        if (tree("output_tree") == null) {
+            pendingBatch = entries
+            chooseOutputTree.launch(null)
+            return
+        }
+        val parent = tree("output_tree") ?: return
+        val format = outputFormat
+        busy = true
+        findViewById<Button>(R.id.buttonOpen).isEnabled = false
+        findViewById<ProgressBar>(R.id.progressBar).visibility = View.VISIBLE
         lifecycleScope.launch {
+            var success = 0
+            val failures = mutableListOf<String>()
             try {
-                val result = withContext(Dispatchers.IO) {
-                    contentResolver.openInputStream(uri)?.use { readSamples(it, sourceVersion) }
-                        ?: error("ファイルを開けません")
+                val folder = withContext(Dispatchers.IO) {
+                    val result = parent.findFile("BON4_Converted")
+                        ?: parent.createDirectory("BON4_Converted")
+                        ?: error("保存先フォルダを作成できません")
+                    if (!result.isDirectory || !result.canWrite()) error("保存先フォルダに書き込めません")
+                    result
                 }
-                samples = result
-                detectedTime = result.firstOrNull()?.m_timestamp
-                suggestedTrack = recognizeTrack(result)
-                updateStatus()
-                if (result.isNotEmpty()) export()
+                for ((index, entry) in entries.withIndex()) {
+                    findViewById<TextView>(R.id.textView).text =
+                        "変換中 ${index + 1} / ${entries.size}\n${entry.name}\n成功: $success / 失敗: ${failures.size}"
+                    try {
+                        val version = when (entry.name.substringAfterLast('.', "").uppercase()) {
+                            "BON1" -> LocationData.DataVersion.BON1
+                            "BON4" -> LocationData.DataVersion.BON4
+                            else -> error("BON1/BON4ではありません")
+                        }
+                        val result = withContext(Dispatchers.IO) {
+                            val points = contentResolver.openInputStream(entry.uri)?.use { readSamples(it, version) }
+                                ?: error("読み取りに失敗")
+                            if (points.isEmpty()) error("GPSデータがありません")
+                            val track = recognizeTrack(points).replace(Regex("[^a-zA-Z0-9_-]"), "_").take(40)
+                            val firstTime = points.first().m_timestamp
+                            val date = firstTime.format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
+                            var name = "${date}_${track}.${format}"
+                            var suffix = 1
+                            while (folder.findFile(name) != null) {
+                                name = "${date}_${track}_${suffix++}.${format}"
+                            }
+                            val dest = folder.createFile("application/octet-stream", name)
+                                ?: error("保存ファイルを作れません")
+                            try {
+                                contentResolver.openInputStream(entry.uri)!!.use { input ->
+                                    contentResolver.openOutputStream(dest.uri, "wt")!!.bufferedWriter().use { writer ->
+                                        writeConverted(input, writer, version, format, firstTime)
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                dest.delete()
+                                throw e
+                            }
+                            name
+                        }
+                        success++
+                        sourceName = entry.name
+                        suggestedTrack = result.substringAfter("_").substringBeforeLast(".")
+                    } catch (e: Exception) {
+                        failures.add("${entry.name}: ${e.message ?: "不明なエラー"}")
+                    }
+                }
+                val message = "変換完了: 成功 $success / ${entries.size} 件、失敗 ${failures.size} 件"
+                findViewById<TextView>(R.id.textView).text =
+                    message + if (failures.isEmpty()) "" else "\n" + failures.take(5).joinToString("\n")
+                toast(message)
             } catch (e: Exception) {
-                findViewById<TextView>(R.id.textView).text = "解析失敗: ${e.message}"
+                findViewById<TextView>(R.id.textView).text = "変換失敗: ${e.message}"
+            } finally {
+                busy = false
+                findViewById<Button>(R.id.buttonOpen).isEnabled = true
+                findViewById<ProgressBar>(R.id.progressBar).visibility = View.GONE
             }
         }
     }
@@ -245,67 +319,13 @@ class MainActivity : AppCompatActivity() {
         val lat = Math.toRadians((a + c) / 2)
         return hypot((a - c) * 111195, (b - d) * 111195 * cos(lat))
     }
-    private fun export() {
-        if (busy || source == null) { toast("BONファイルを選択してください"); return }
-        if (tree("output_tree") == null) { chooseOutputTree.launch(null); return }
-        save(if (suggestedTrack == "Unknown") "Unknown" else suggestedTrack.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(40))
-    }
-    private fun save(track: String) {
-        val src = source ?: return
-        val parent = tree("output_tree") ?: run { chooseOutputTree.launch(null); return }
-        busy = true
-        updateStatus()
-        findViewById<ProgressBar>(R.id.progressBar).visibility = View.VISIBLE
-        lifecycleScope.launch {
-            try {
-                val date = detectedTime?.format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
-                    ?: "unknown_date"
-                val filename = "${date}_${track}.vbo"
-                val result = withContext(Dispatchers.IO) {
-                    val folder = parent.findFile("BON4_Converted")
-                        ?: parent.createDirectory("BON4_Converted")
-                        ?: error("保存先フォルダを作成できません")
-                    if (!folder.isDirectory || !folder.canWrite()) error("保存先フォルダに書き込めません")
-                    var candidate = filename
-                    var suffix = 1
-                    while (folder.findFile(candidate) != null) {
-                        candidate = "${date}_${track}_${suffix++}.vbo"
-                    }
-                    val mime = "application/octet-stream"
-                    val dest = folder.createFile(mime, candidate) ?: error("保存ファイルを作れません")
-                    try {
-                        contentResolver.openInputStream(src)!!.use { raw ->
-                            contentResolver.openOutputStream(dest.uri, "wt")!!.bufferedWriter().use { writer ->
-                                writeConverted(raw, writer, sourceVersion, "vbo")
-                            }
-                        }
-                    } catch (e: Exception) { dest.delete(); throw e }
-                    candidate
-                }
-                // Learn only explicitly confirmed names. Unknown is never learned.
-                if (track != "Unknown" && samples.isNotEmpty()) {
-                    val lat = samples.map { it.m_latitude / 60000000.0 }.average()
-                    val lon = samples.map { it.m_longtitude / 60000000.0 }.average()
-                    val old = prefs.getString("track_fingerprints", "") ?: ""
-                    prefs.edit().putString("track_fingerprints", (old + "\n$track|$lat|$lon").trim()).apply()
-                }
-                toast("保存しました: $result")
-            } catch (e: Exception) { toast("変換失敗: ${e.message}") }
-            finally {
-                busy = false
-                updateStatus()
-                findViewById<ProgressBar>(R.id.progressBar).visibility = View.INVISIBLE
-            }
-        }
-    }
     private fun writeConverted(stream: InputStream, writer: BufferedWriter,
-                               version: LocationData.DataVersion, output: String) {
+                               version: LocationData.DataVersion, output: String, creationTime: LocalDateTime) {
         val input = BufferedInputStream(stream)
         if (readFully(input, ByteArray(8)) != 8) error("BONヘッダーが不完全です")
         if (output == "vbo") {
             // RaceChrono uses the creation date from the first VBO line.
-            val creation = detectedTime?.format(DateTimeFormatter.ofPattern("dd/MM/yyyy 'at' HH:mm:ss"))
-                ?: "01/01/2000 at 00:00:00"
+            val creation = creationTime.format(DateTimeFormatter.ofPattern("dd/MM/yyyy 'at' HH:mm:ss"))
             writer.write("File created on $creation"); writer.newLine(); writer.newLine()
             writer.write("[header]"); writer.newLine()
             listOf("satellites", "time", "latitude", "longitude", "velocity kmh",
