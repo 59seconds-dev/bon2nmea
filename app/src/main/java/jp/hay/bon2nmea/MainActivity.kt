@@ -215,7 +215,7 @@ class MainActivity : AppCompatActivity() {
                                 error("コース別フォルダに書き込めません: $track")
                             }
                             val firstTime = points.first().m_timestamp
-                            val date = firstTime.format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
+                            val date = firstTime.plusHours(9).format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
                             var name = "${date}_${track}.${format}"
                             var suffix = 1
                             while (courseFolder.findFile(name) != null) {
