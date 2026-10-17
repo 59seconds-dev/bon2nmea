@@ -145,7 +145,7 @@ class MainActivity : AppCompatActivity() {
     private fun readSamples(stream: InputStream, version: LocationData.DataVersion): List<LocationData> {
         val input = BufferedInputStream(stream)
         val header = ByteArray(8)
-        readFully(input, header) ?: error("BONヘッダーが不完全です")
+        if (readFully(input, header) != 8) error("BONヘッダーが不完全です")
         val points = ArrayList<LocationData>()
         var previous: LocationData? = null
         val chunk = ByteArray(26)
@@ -258,7 +258,7 @@ class MainActivity : AppCompatActivity() {
     private fun writeConverted(stream: InputStream, writer: BufferedWriter,
                                version: LocationData.DataVersion, output: String) {
         val input = BufferedInputStream(stream)
-        readFully(input, ByteArray(8)) ?: error("BONヘッダーが不完全です")
+        if (readFully(input, ByteArray(8)) != 8) error("BONヘッダーが不完全です")
         if (output == "vbo") {
             writer.write("[header]"); writer.newLine()
             writer.write("satellites 0"); writer.newLine()
