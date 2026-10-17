@@ -57,5 +57,9 @@
             android:layout_height="wrap_content" android:text="出力フォルダを変更"
             android:textAllCaps="false" android:backgroundTint="#193B5A"
             android:textColor="#F4F8FF"/>
+        <TextView android:id="@+id/versionInfo" android:layout_width="match_parent"
+            android:layout_height="wrap_content" android:paddingTop="22dp"
+            android:gravity="center" android:textColor="#7896AE"
+            android:textSize="12sp" android:text="バージョン確認中"/>
     </LinearLayout>
 </ScrollView>
