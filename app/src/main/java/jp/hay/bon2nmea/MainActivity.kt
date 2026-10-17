@@ -50,6 +50,7 @@ class MainActivity : AppCompatActivity() {
             persistTree(uri)
             prefs.edit().putString("output_tree", uri.toString()).apply()
             updateFolders()
+            if (source != null && samples.isNotEmpty()) export()
         }
     }
     private val chooseSingleFile = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -198,18 +199,7 @@ class MainActivity : AppCompatActivity() {
     private fun export() {
         if (busy || source == null) { toast("BONファイルを選択してください"); return }
         if (tree("output_tree") == null) { chooseOutputTree.launch(null); return }
-        val input = EditText(this).apply {
-            setSingleLine(true)
-            setText(if (suggestedTrack == "Unknown") "" else suggestedTrack)
-            hint = "コース名（例 TC2000）"
-        }
-        AlertDialog.Builder(this).setTitle("コース名を確認")
-            .setView(input)
-            .setPositiveButton("変換して保存") { _, _ ->
-                val track = input.text.toString().trim().ifBlank { "Unknown" }
-                    .replace(Regex("[^a-zA-Z0-9_-]"), "_").take(40)
-                save(track)
-            }.setNegativeButton("キャンセル", null).show()
+        save(if (suggestedTrack == "Unknown") "Unknown" else suggestedTrack.replace(Regex("[^a-zA-Z0-9_-]"), "_").take(40))
     }
     private fun save(track: String) {
         val src = source ?: return
