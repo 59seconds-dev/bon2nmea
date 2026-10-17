@@ -274,15 +274,33 @@ class MainActivity : AppCompatActivity() {
             writer.write("[data]"); writer.newLine()
         }
         var previous: LocationData? = null
+        var pending: LocationData? = null
         val chunk = ByteArray(26)
         while (true) {
             val n = readFully(input, chunk) ?: break
             if (n != 26) error("不完全なBONレコード")
             val point = LocationData(chunk, previous, version)
-            if (output == "nmea") writer.write(point.getNmea())
-            else writer.write(VboExporter.line(point))
-            writer.newLine()
+            // A BON4 sample can have a one-second rollover glitch (e.g.
+            // 06:32:27.890, 06:32:28.990, 06:32:28.100).
+            // Fix the middle sample before writing it; RaceChrono otherwise
+            // interprets the backwards time jump as a 24-hour rollover.
+            val buffered = pending
+            if (buffered != null) {
+                if (output == "vbo" &&
+                    buffered.m_timestamp.isAfter(point.m_timestamp) &&
+                    java.time.Duration.between(point.m_timestamp, buffered.m_timestamp).toMillis() in 1..999
+                ) {
+                    buffered.m_timestamp = buffered.m_timestamp.minusSeconds(1)
+                }
+                writer.write(if (output == "nmea") buffered.getNmea() else VboExporter.line(buffered))
+                writer.newLine()
+            }
+            pending = point
             previous = point
+        }
+        pending?.let {
+            writer.write(if (output == "nmea") it.getNmea() else VboExporter.line(it))
+            writer.newLine()
         }
     }
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
